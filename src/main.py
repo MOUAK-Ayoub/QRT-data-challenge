@@ -5,15 +5,53 @@ HOME_WINS = 1
 AWAY_WINS = -2
 
 
-def prepare_attribut_data(path_away: str, path_home: str, is_test=False):
+def prepare_attribut_data(path_away: str, path_home: str, columns: list[str] = [],
+                          use_player_data: bool = False, is_test: bool = False
+
+                          ):
+    '''
+
+    :param path_away:
+    :param path_home:
+    :param columns: if columns is empty so take into account all columns
+    :param is_test: test data doesn't have LEAGUE and TEAM_NAME columns
+    :return:
+    '''
     df_away = pd.read_csv(path_away)
     df_home = pd.read_csv(path_home)
-    if not is_test:
-        df_away = df_away.drop(['LEAGUE', 'TEAM_NAME'], axis=1)
-        df_home = df_home.drop(['LEAGUE', 'TEAM_NAME'], axis=1)
+    if columns:
+        df_away = df_away.filter(items=columns)
+        df_home = df_home.filter(items=columns)
+
+    # If not test data and columns is all (so empty)
+    if not is_test and not columns:
+        team_col_to_drop = ['LEAGUE', 'TEAM_NAME']
+        df_away = df_away.drop(team_col_to_drop, axis=1)
+        df_home = df_home.drop(team_col_to_drop, axis=1)
     df_home.columns = [('HOME_' + str(col)) if col != 'ID' else 'ID' for col in df_home.columns]
     df_away.columns = [('AWAY_' + str(col)) if col != 'ID' else 'ID' for col in df_away.columns]
     df_joined = df_home.join(df_away.set_index('ID'), on='ID')
+    if use_player_data:
+        path_player_away = path_away.replace('team', 'player')
+        path_player_home = path_home.replace('team', 'player')
+        playes_col_to_drop = ['LEAGUE', 'TEAM_NAME', 'POSITION', 'PLAYER_NAME'] if not is_test else ['POSITION']
+
+        df_player_away = pd.read_csv(path_player_away).drop(playes_col_to_drop, axis=1)
+        df_player_home = pd.read_csv(path_player_home).drop(playes_col_to_drop, axis=1)
+
+        df_player_away.columns = [('AWAY_' + str(col)) if col != 'ID' else 'ID' for col in df_player_away.columns]
+        df_player_home.columns = [('HOME_' + str(col)) if col != 'ID' else 'ID' for col in df_player_home.columns]
+
+        df_player_away = df_player_away.fillna(0.0)
+        df_player_home = df_player_home.fillna(0.0)
+
+        df_player_away_agg = df_player_away.groupby('ID', as_index=False).sum()
+        df_player_home_agg = df_player_home.groupby('ID', as_index=False).sum()
+
+        df_joined = (
+                      df_joined.join(df_player_away_agg.set_index('ID'), on='ID')
+                     .join(df_player_home_agg.set_index('ID'), on='ID')
+        )
     df_joined = df_joined.fillna(0.0)
     df_final = df_joined.sort_values(by=['ID'])
 
